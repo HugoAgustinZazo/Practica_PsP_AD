@@ -10,7 +10,6 @@ import java.util.List;
 @Service
 public class ServiceReserva {
 
-
     @Autowired
     private RepositoryReserva reservaRepository;
 
@@ -29,19 +28,19 @@ public class ServiceReserva {
     public boolean verificarConflicto(Reservas reserva){
         List<Reservas> reservas = findAll();
         for(Reservas r : reservas){
-            if(r.getFecha().getDiaReserva() == reserva.getFecha().getDiaReserva() &&
-                    r.getFecha().getHoraReserva() == reserva.getFecha().getHoraReserva()){
+            if(r.getFecha().getDiaReserva() == reserva.getFecha().getDiaReserva() && r.getFecha().getHoraReserva() == reserva.getFecha().getHoraReserva()){
                 return true;
             }
         }
         return false;
     }
-
+    public List<Reservas> obtenerReservasPorDia(int dia) {
+        return reservaRepository.findByFechaDiaReserva(dia);
+    }
     public Reservas actualizarReserva(Reservas reserva) {
         if (reserva == null || reserva.getId() == null) {
             return null;
         }
-
         return reservaRepository.save(reserva);
     }
 

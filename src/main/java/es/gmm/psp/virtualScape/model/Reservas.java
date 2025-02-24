@@ -12,10 +12,11 @@ public class Reservas {
     private Contacto contacto;
     private int jugadores;
 
-    public Reservas(String nombreSala, Fecha fecha, Contacto contacto) {
+    public Reservas(String nombreSala, Fecha fecha, Contacto contacto, int jugadores) {
         this.nombreSala = nombreSala;
         this.fecha = fecha;
         this.contacto = contacto;
+        this.jugadores = jugadores;
     }
 
     public String getId() {

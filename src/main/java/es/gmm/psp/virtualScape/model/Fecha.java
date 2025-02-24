@@ -5,6 +5,11 @@ public class Fecha {
     private int horaReserva;
     private int diaReserva;
 
+    public Fecha(int horaReserva, int diaReserva) {
+        this.horaReserva = horaReserva;
+        this.diaReserva = diaReserva;
+    }
+
     public int getHoraReserva() {
         return horaReserva;
     }
