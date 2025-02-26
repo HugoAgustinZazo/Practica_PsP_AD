@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +22,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/virtual-escape/reservas")
 public class ReservaAPI {
+    private static final Logger logger = LoggerFactory.getLogger(ReservaAPI.class);
+
     @Autowired
     private ServiceReserva serviceReserva;
 
@@ -63,10 +67,12 @@ public class ReservaAPI {
         Reservas newReserva = new Reservas(nombreSala,new Fecha(horaReserva,diaReserva),new Contacto(titular,telefono),jugadores);
         boolean conflicto = serviceReserva.verificarConflicto(newReserva);
         if (conflicto) {
+            logger.error("Conflicto de horarios con otra reserva");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(new RespuestaApi(false, "Conflicto de horarios con otra reserva", null));
         }
 
         newReserva = serviceReserva.save(newReserva);
+        logger.info("Reserva creada con exito");
         return ResponseEntity.status(HttpStatus.CREATED).body(new RespuestaApi(true, "Reserva creada con exito", newReserva.getId()));
     }
 
@@ -99,8 +105,10 @@ public class ReservaAPI {
     public ResponseEntity<?> getReservas() {
         List<Reservas> reservas = serviceReserva.findAll();
         if (reservas == null || reservas.isEmpty()) {
+            logger.error("No hay reservas registradas");
             return ResponseEntity.status(HttpStatus.NO_CONTENT).body(new RespuestaApi(false, "No hay reservas registradas", null));
         }
+        logger.info("Reservas recuperadas correctamente");
         return ResponseEntity.ok(reservas);
     }
 
@@ -133,6 +141,7 @@ public class ReservaAPI {
         if (reserva != null) {
             return ResponseEntity.ok(reserva);
         }
+        logger.info("Reserva recuperada correctamente con id: "+reserva.getId());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RespuestaApi(false, "Reserva no encontrada", null));
     }
 
@@ -181,15 +190,18 @@ public class ReservaAPI {
     public ResponseEntity<RespuestaApi> actualizarReserva(@PathVariable String id,@RequestParam String nombreSala,@RequestParam int diaReserva,@RequestParam int horaReserva, @RequestParam String titular,@RequestParam int telefono,@RequestParam int jugadores,@Valid @RequestBody Reservas reserva) {
         Reservas reservaYaCreada = serviceReserva.findById(id);
         if (reservaYaCreada == null) {
+            logger.error("Reserva no encontrada");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RespuestaApi(false, "Reserva no encontrada", null));
         }
         Sala salaYacreada = serviceSala.getByName(nombreSala);
         if(salaYacreada==null){
+            logger.error("La sala no existe");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "La sala no existe", null));
         }
         reserva.setId(id);
         boolean conflicto = serviceReserva.verificarConflicto(reserva);
         if (conflicto) {
+            logger.error("Hay conflicto de horarios con otra reserva");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(new RespuestaApi(false, "Conflicto de horarios con otra reserva", null));
         }
         reserva.setJugadores(jugadores);
@@ -198,13 +210,15 @@ public class ReservaAPI {
         reserva.setFecha(new Fecha(diaReserva, horaReserva));
         try {
             Reservas reservaConDatosNuevos = serviceReserva.actualizarReserva(reserva);
-            Reservas compribacion = serviceReserva.findById(reservaConDatosNuevos.getId());
-            if (compribacion == null) {
+            Reservas comprobacion = serviceReserva.findById(reservaConDatosNuevos.getId());
+            if (comprobacion == null) {
+                logger.error("Error al verificar la actualizacion");
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new RespuestaApi(false, "Error al verificar la actualización", null));
             }
             return ResponseEntity.ok(new RespuestaApi(true, "Reserva actualizada con éxito",reservaConDatosNuevos.getId()));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "Datos inválidos en la petición", null));
+            logger.error("Datos no válidos en la petición");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "Datos no válidos en la petición", null));
         }
     }
 
@@ -233,6 +247,7 @@ public class ReservaAPI {
     public ResponseEntity<RespuestaApi> eliminarReserva(@PathVariable String id) {
         Reservas reserva = serviceReserva.findById(id);
         if (reserva == null) {
+            logger.error("Reserva no encontrada");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RespuestaApi(false, "Reserva no encontrada", null));
         }
         serviceReserva.eliminarReserva(id);
