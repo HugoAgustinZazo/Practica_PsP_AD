@@ -1,10 +1,8 @@
 package es.gmm.psp.virtualScape.controladores;
 
-import es.gmm.psp.virtualScape.model.Contacto;
-import es.gmm.psp.virtualScape.model.Fecha;
-import es.gmm.psp.virtualScape.model.Reservas;
-import es.gmm.psp.virtualScape.model.RespuestaApi;
+import es.gmm.psp.virtualScape.model.*;
 import es.gmm.psp.virtualScape.services.ServiceReserva;
+import es.gmm.psp.virtualScape.services.ServiceSala;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -24,6 +22,9 @@ import java.util.List;
 public class ReservaAPI {
     @Autowired
     private ServiceReserva serviceReserva;
+
+    @Autowired
+    private ServiceSala serviceSala;
 
 
     @Operation(summary = "Crear una nueva reserva", description = "Crea una nueva reserva si no hay conflicto de horarios")
@@ -178,9 +179,13 @@ public class ReservaAPI {
     })
     @PutMapping("/{id}")
     public ResponseEntity<RespuestaApi> actualizarReserva(@PathVariable String id,@RequestParam String nombreSala,@RequestParam int diaReserva,@RequestParam int horaReserva, @RequestParam String titular,@RequestParam int telefono,@RequestParam int jugadores,@Valid @RequestBody Reservas reserva) {
-        Reservas reservaExistente = serviceReserva.findById(id);
-        if (reservaExistente == null) {
+        Reservas reservaYaCreada = serviceReserva.findById(id);
+        if (reservaYaCreada == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RespuestaApi(false, "Reserva no encontrada", null));
+        }
+        Sala salaYacreada = serviceSala.getByName(nombreSala);
+        if(salaYacreada==null){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "La sala no existe", null));
         }
         reserva.setId(id);
         boolean conflicto = serviceReserva.verificarConflicto(reserva);
@@ -232,5 +237,32 @@ public class ReservaAPI {
         }
         serviceReserva.eliminarReserva(id);
         return ResponseEntity.status(HttpStatus.CREATED).body(new RespuestaApi(true, "Reserva eliminada con éxito", id));
+    }
+
+    @Operation(summary = "Obtener reservas por día", description = "Devuelve todas las reservas para un día específico.")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Reservas encontradas",
+                    content = @Content(
+                            schema = @Schema(
+                                    example = "[ { \"sala\": \"La Casa del Terror\", \"dia\": 3, \"hora\": 18, \"contacto\": { \"titular\": \"Diego\", \"telefono\": 685414005 }, \"jugadores\": 4 } ]"
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "No hay reservas para ese día",
+                    content = @Content(
+                            schema = @Schema(
+                                    example = "{\"exito\": false, \"mensajeError\": \"Reserva no encontrada\", \"idGenerado\": null}"
+                            )
+                    )
+            )
+    })
+    @GetMapping("/dia/{dia}")
+    public ResponseEntity<List<Reservas>> obtenerReservasPorDia(@PathVariable int dia) {
+        List<Reservas> reservas = serviceReserva.obtenerReservasPorDia(dia);
+        return reservas.isEmpty() ? ResponseEntity.noContent().build() : ResponseEntity.ok(reservas);
     }
 }

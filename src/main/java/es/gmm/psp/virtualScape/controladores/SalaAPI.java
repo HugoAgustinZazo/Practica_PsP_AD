@@ -2,6 +2,7 @@ package es.gmm.psp.virtualScape.controladores;
 
 import es.gmm.psp.virtualScape.model.RespuestaApi;
 import es.gmm.psp.virtualScape.model.Sala;
+import es.gmm.psp.virtualScape.model.SalasMasReservadas;
 import es.gmm.psp.virtualScape.services.ServiceSala;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -40,8 +41,24 @@ public class SalaAPI {
                                     example = "{\"exito\": false, \"mensajeError\": \"Datos no válidos en la petición\", \"idGenerado\": null}")))
     })
     @PostMapping
-    public ResponseEntity<RespuestaApi> crearSala(@Valid @RequestBody Sala sala) {
+    public ResponseEntity<RespuestaApi> nuevaSala(@RequestParam String nombre,@RequestParam int capacidadMin,@RequestParam int capacidadMax,@RequestParam List<String> tematicas,@Valid @RequestBody Sala sala) {
+        if (capacidadMin < 1 || capacidadMax > 8) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "El número de jugadores debe ser entre 1 y 8", null));
+        }
+        int totalJugadores = serviceSala.getTodosJugadores();
+        if (totalJugadores + capacidadMax > 30) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "El número total de jugadores no puede superar los 30", null));
+        }
         sala.setId(null);
+        sala.setNombre(nombre);
+        sala.setCapacidadMin(capacidadMin);
+        sala.setCapacidadMax(capacidadMax);
+        sala.setTematicas(tematicas);
+
+        Sala salaYaCreada = serviceSala.getByName(sala.getNombre());
+        if (salaYaCreada != null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "Ya existe una sala con ese nombre", null));
+        }
         Sala newSala = serviceSala.crearSala(sala);
         Sala verificacion = serviceSala.findById(newSala.getId());
         if (verificacion == null) {
@@ -121,14 +138,28 @@ public class SalaAPI {
                                     example = "{\"exito\": false, \"mensajeError\": \"Sala no encontrada\", \"idGenerado\": null}")))
     })
     @PutMapping("/{id}")
-    public ResponseEntity<RespuestaApi> actualizarSala(@PathVariable String id, @Valid @RequestBody Sala sala) {
+    public ResponseEntity<RespuestaApi> actualizarSala(@PathVariable String id,@RequestParam String nombre,@RequestParam int capacidadMin,@RequestParam int capacidadMax,@RequestParam List<String> tematicas, @Valid @RequestBody Sala sala) {
         Sala salaCreada = serviceSala.findById(id);
         if (salaCreada == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RespuestaApi(false, "Sala no encontrada", null));
         }
-        sala.setId(id);
+
+        if (!salaCreada.getNombre().equals(nombre)) {
+            Sala salaConMismoNombre = serviceSala.getByName(nombre);
+            if (salaConMismoNombre != null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "El nombre de la sala ya existe", null));
+            }
+        }
+        int totalJugadoresAntes = serviceSala.getTodosJugadores() - salaCreada.getCapacidadMax();
+        if (totalJugadoresAntes + capacidadMax > 30) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "El número total de jugadores no puede ser mayor a 30", null));
+        }
+        salaCreada.setNombre(nombre);
+        salaCreada.setCapacidadMin(capacidadMin);
+        salaCreada.setCapacidadMax(capacidadMax);
+        salaCreada.setTematicas(tematicas);
         try {
-            Sala salaActualizada = serviceSala.updateSala(sala);
+            Sala salaActualizada = serviceSala.updateSala(salaCreada);
             Sala verificacion = serviceSala.findById(salaActualizada.getId());
             if (verificacion == null) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new RespuestaApi(false, "Error al verificar la actualización", null));
@@ -138,4 +169,55 @@ public class SalaAPI {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new RespuestaApi(false, "Datos inválidos en la petición", null));
         }
     }
+
+    @Operation(summary = "Consultar salas por temática", description = "Consulta las salas que coinciden con el nombre de la temática introducida")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Salas encontradas",
+                    content = @Content(
+                            array = @ArraySchema(
+                                    schema = @Schema(
+                                            example = "[{\"id\": \"1\", \"nombre\": \"Sala 1\", \"capacidadMin\": 2, \"capacidadMax\": 8, \"tematicas\": [\"Ciencia y Ficción\", \"Thriller\"]}, {\"id\": \"2\", \"nombre\": \"Sala 2\", \"capacidadMin\": 4, \"capacidadMax\": 6, \"tematicas\": [\"Romantica\", \"Comédia\"]}]")))),
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "No se encontraron salas con esa temática",
+                    content = @Content(
+                            schema = @Schema(
+                                    example = "{\"exito\": false, \"mensaje\": \"No se encontraron salas con esa temática\", \"idGenerado\": null}")))
+    })
+    @GetMapping("/tematica/{nombreTematica}")
+    public ResponseEntity<?> getSalasPorTematica(@PathVariable String nameTematica) {
+        List<Sala> salas = serviceSala.getByNameTematica(nameTematica);
+        if (salas == null || salas.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+        }
+        return ResponseEntity.ok(salas);
+    }
+
+    @Operation(summary = "Listar salas con más reservas", description = "Devuelve las salas que más han sido reservadas")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Datos encontrados",
+                    content = @Content(
+                            array = @ArraySchema(
+                                    schema = @Schema(
+                                            example = "[{\"id\": \"1\", \"nombre\": \"Sala 1\", \"capacidad\": 3}, {\"id\": \"2\", \"nombre\": \"Sala 2\", \"capacidad\": 6}]")))),
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "No se encontraron datos",
+                    content = @Content(
+                            schema = @Schema(
+                                    example = "{\"exito\": false, \"mensaje\": \"No se encontraron datos\", \"idGenerado\": null}")))
+    })
+    @GetMapping("/mas-reservadas")
+    public ResponseEntity<List<SalasMasReservadas>> getSalasMasReservadas() {
+        List<SalasMasReservadas> salas = serviceSala.obtenerSalasMasReservadas();
+        if (salas == null || salas.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(salas);
+    }
+
 }
